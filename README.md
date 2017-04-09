@@ -3,8 +3,6 @@
 This project aims to
 
 1. crawl all webpages in NU,
-
-
 2. build a network graph of their inter-connections,
 3. identify the important ones using the PageRank algorithm,
 4. find other interesting stuff!
@@ -17,9 +15,13 @@ This program only analyzes text pages, such as HTML pages or pages returned by P
 
 Multi threads are used because url requests and responses take a long time when scraping the internet. I am using 4 threads with a central task queue.
 
-Parsing urls on the internet turns out much harder than I expected. The url standard is actually a very loose constraint. There are so many unexpected url parsing problems. For example, you may or may not include `http://` in your url; an url point to a directory can end with or without `/`; you can specify an url with relative directory starting from `../` so an identical url may appear as `example.com/b` or `example.com/a/../b`. This is a big problem since I need a more uniform format for urls to remember the urls (strings actually) I have visited. Originally I was trying to manually write a long if statement to handle all those cases. Then I realized that the browsers can handle almost all problems so there must be an existing library for this! In the end, I used `urlparse.urljoin` to combine partial urls with the starting url, and `w3lib.url.canonicalize_url` to have a uniform style from all urls. Still, there are some bad urls that I need to process manually. Someone used url `/http://example.com` and someone else used `<a href = " example.com ">` in html. Also, the `example.com` and `example.com/` difference is not handled.
+Parsing urls on the internet turns out much harder than I expected. The url standard is actually a very loose constraint. There are so many unexpected url parsing problems. For example, you may or may not include `http://` in your url; an url point to a directory can end with or without `/`; you can specify an url with relative directory starting from `../` so an identical url may appear as `example.com/b` or `example.com/a/../b`. This is a big problem since I need a more uniform format for urls to remember the urls (strings actually) I have visited. Originally I was trying to manually write a long `if` statement to handle all those cases. Then I realized that the browsers can handle almost all problems so there must be an existing library for this! In the end, I used `urlparse.urljoin` to combine partial urls with the starting url, and `w3lib.url.canonicalize_url` to have a uniform style from all urls. Still, there are some bad urls that I need to process manually. Someone used url `/http://example.com` and someone else used `<a href = " example.com ">` in html. Also, the `example.com` and `example.com/` difference is not handled.
 
-Another big problem is url queries, especially on sites that provide a search function. At an initial test, my bot entered one of that site and got stuck inside the infinite loop of automatically generated urls. Turns out there is a neat way to avoid those websites. The answer is, they also want to avoid all the bots to use their resources! So I can simply visit the `robots.txt` file on those sites, and use `RobotFileParser.can_fetch(url)` to determine whether I should visit that url.
+Another big problem is urls with queries, especially on sites that provide a search function. At an initial test, my bot entered one of that site and got stuck inside the infinite loop of automatically generated urls. Turns out there is a standard way to avoid those pages. The answer is, they also want to prevent all bots from using their resources! So I can simply visit the `robots.txt` file on those sites, and use `robotparser.RobotFileParser().can_fetch(url)` to determine whether I should visit that url.
+
+**Edit:** Following `robots.txt` works for most sites. But I still need to manually take care of a few sites that do not have valid `robots.txt` files (and send emails to the developers of those sites).
+
+**Edit again:** Apparently, the build-in `robotparser` module in Python is using an old standard for `robots.txt`, thus cannot properly interpret `*` in the rule. I later switched to the third party package [`robotexclusionrulesparser`](https://pypi.python.org/pypi/robotexclusionrulesparser) to replace the build-in parser.
 
 ### Url network
 
@@ -27,4 +29,4 @@ This is pretty straight forward. For each page, I find all links identified as `
 
 Many urls involve redirection. In this program, I only considered the requested url `A` and returned url `B`, and treated that as a link from `A` to `B`. It might be better to add a post-process to label them as identical url.
 
-More work going on … 
+More work going on …
