@@ -9,8 +9,8 @@ import codecs
 import w3lib.url
 from robotexclusionrulesparser import RobotExclusionRulesParser
 
-DOMAIN = 'northwestern.edu' # only consider site ending with DOMAIN
-MAX_URLS = 10000 # stop when there are so many urls in the dict to avoid OOM!
+DOMAIN = 'kellogg.northwestern.edu' # only consider site ending with DOMAIN
+MAX_URLS = 1000000 # stop when there are so many urls in the dict to avoid OOM!
 N_workers = 4 # # of threads
 global_id = 0 # self increasing
 url_tasks = Queue.Queue()
@@ -22,10 +22,13 @@ write_lock = Lock()
 robots_policies = {} # robots.txt info on each site
 rp_lock = Lock() # lock for robots_policies
 urls_extensions = set() # just for science
-skip_file_types = set(['jpg', 'png', 'bmp',
-                       'pdf', 'doc', 'docx', 'ppt', 'pptx',
-                       'mp3', 'mp4', 'swf',
-                       'css', 'js']) # skip those file types
+skip_file_types = set(['jpg', 'png', 'bmp', 'eps', 'gif', 'jpeg', 'svg', 'tif', 'tiff',
+                       'pdf', 'doc', 'docx', 'ppt', 'pptx', 'csv', 'xls', 'xlsx',
+                       'mp3', 'mp4', 'swf', 'avi', 'dvi', 'mov', 'mid', 'mpeg', 'mpg',
+                       'wav', 'wma', 'wmv',
+                       'apk', 'dmg', 'exe', 'msi', 'zip',
+                       'ttt',   # what is this?
+                       'css', 'js', 'dll']) # skip those file types
 
 class UrlCrawler(Thread):
     def __init__(self, id):
@@ -78,8 +81,12 @@ class UrlCrawler(Thread):
             if url.startswith('/http://') or url.startswith('/https://'):
                 # why would someone do this?
                 url = url[1:]
+            if url.startswith('mailto:') or url.startswith('mailto@'):
+                continue
             
             fixed_url = w3lib.url.canonicalize_url(urljoin(in_url, url))
+            if len(fixed_url) > 1000: # long urls tend to be wrong urls
+                continue
             uri = urlparse(fixed_url)
             if uri.scheme is not None and uri.scheme not in ['http','https', '']:
                 continue
@@ -126,7 +133,9 @@ class UrlCrawler(Thread):
         #release lock
         print('%d urls in total reported by %d' % (global_id, self.id))
 
-def manual_add_robot_policies(): # coz some critical sites have invalid robots.txt
+def manual_add_robot_policies():
+    # coz some critical sites have invalid robots.txt
+    ## surprised to see SO MANY sites without valid robots.txt!
     site_rp = RobotExclusionRulesParser()
     site_rp.parse('User-agent: * \n' + 'Disallow: /search\n' 
                   + 'Disallow: /advanced_search\n')
@@ -142,12 +151,27 @@ def manual_add_robot_policies(): # coz some critical sites have invalid robots.t
     robots_policies['images.library.northwestern.edu'] = site_rp
     robots_policies['images.northwestern.edu'] = site_rp
     robots_policies['media.northwestern.edu'] = site_rp
+    robots_policies['arch.library.northwestern.edu'] = site_rp
     
+    site_rp = RobotExclusionRulesParser()
+    site_rp.parse('User-agent: * \n' + 'Disallow: /?*\n')
+    robots_policies['schedule.radiology.northwestern.edu'] = site_rp
+    
+    site_rp = RobotExclusionRulesParser()
+    try:
+        request = urllib2.Request('http://www.ctd.northwestern.edu/robots.txt')
+        response = urllib2.urlopen(request, timeout = 5)
+        content = response.read()
+    except:
+        content = 'User-agent: * \n'
+    content += ('Disallow: /courses?*\n')
+    site_rp.parse(content)
+    robots_policies['www.ctd.northwestern.edu'] = site_rp
 
 if __name__ == '__main__':
     manual_add_robot_policies()
     
-    start_url = "http://www.northwestern.edu/"
+    start_url = "http://www.kellogg.northwestern.edu/"
     url_tasks = Queue.Queue()
     url_tasks.put(start_url)
     url_ids[start_url] = 0

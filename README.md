@@ -30,3 +30,9 @@ This is pretty straight forward. For each page, I find all links identified as `
 Many urls involve redirection. In this program, I only considered the requested url `A` and returned url `B`, and treated that as a link from `A` to `B`. It might be better to add a post-process to label them as identical url.
 
 More work going on …
+
+### PageRank
+
+The ranking of the webpages are determined by the famous PageRank algorithm. Relevant codes are in the `PageRank/` folder. Here I am calculating in the iterative way. 40 iterations are used to get close enough to convergence. The parameter `beta` is the damping factor, defined as the probability to "teleport" to a random new page. This can effectively reduce the influence of dead ends in the network.
+
+Note that the number of webpages included is important in determining the algorithm. When the dataset is small, it is also possible to find PageRank by extracting the eigenvectors of the adjacent matrix, though it will require `O(n^2)` memory. With a large number of pages, the slower iterative way works better. The codes included here runs on the Hadoop MarReduce framework thus can be applied for much larger datasets.
