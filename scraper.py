@@ -8,15 +8,16 @@ import time
 import codecs
 import w3lib.url
 from robotexclusionrulesparser import RobotExclusionRulesParser
+import os.path
 
-DOMAIN = 'kellogg.northwestern.edu' # only consider site ending with DOMAIN
-MAX_URLS = 1000000 # stop when there are so many urls in the dict to avoid OOM!
+DOMAIN = 'northwestern.edu' # only consider site ending with DOMAIN
+MAX_URLS = 5000000 # stop when there are so many urls in the dict to avoid OOM!
 N_workers = 4 # # of threads
 global_id = 0 # self increasing
 url_tasks = Queue.Queue()
 url_ids = {} # url : url_id
-transition_file = open('tm.txt', 'w') # transition map: in_id [out_ids]
-url_id_file = codecs.open('ids.txt', 'w', encoding="utf-8") # not all urls are ascii
+transition_file = open('tm_nu.txt', 'w') # transition map: in_id [out_ids]
+url_id_file = codecs.open('ids_nu.txt', 'w', encoding="utf-8") # not all urls are ascii
 last_update = time.time() # last time any thread is active
 write_lock = Lock()
 robots_policies = {} # robots.txt info on each site
@@ -25,7 +26,7 @@ urls_extensions = set() # just for science
 skip_file_types = set(['jpg', 'png', 'bmp', 'eps', 'gif', 'jpeg', 'svg', 'tif', 'tiff',
                        'pdf', 'doc', 'docx', 'ppt', 'pptx', 'csv', 'xls', 'xlsx',
                        'mp3', 'mp4', 'swf', 'avi', 'dvi', 'mov', 'mid', 'mpeg', 'mpg',
-                       'wav', 'wma', 'wmv',
+                       'wav', 'wma', 'wmv', 'm4v',
                        'apk', 'dmg', 'exe', 'msi', 'zip',
                        'ttt',   # what is this?
                        'css', 'js', 'dll']) # skip those file types
@@ -56,7 +57,9 @@ class UrlCrawler(Thread):
             request = urllib2.Request(in_url)
             response = urllib2.urlopen(request, timeout = 5)
             real_url = w3lib.url.canonicalize_url(response.geturl())
-            if response.info().maintype != 'text':
+            real_uri = urlparse(real_url)
+            extension = real_uri.path.lower().split('.')[-1]
+            if response.info().maintype != 'text' or extension in skip_file_types:
                 content = ''
             else:
                 content = response.read()
@@ -169,13 +172,41 @@ def manual_add_robot_policies():
     robots_policies['www.ctd.northwestern.edu'] = site_rp
 
 if __name__ == '__main__':
+    global global_id, last_update
     manual_add_robot_policies()
     
-    start_url = "http://www.kellogg.northwestern.edu/"
-    url_tasks = Queue.Queue()
-    url_tasks.put(start_url)
-    url_ids[start_url] = 0
-    global_id += 1
+    if os.path.isfile('tm_finished.txt') and os.path.isfile('ids_finished.txt'):
+        # warm start
+        finished_ids = set()
+        url_tasks = Queue.Queue()
+        global_id = 0
+        with open('tm_finished.txt', 'r') as f:
+            for line in f:
+                line_split = line.strip().split('\t')
+                if len(line_split) == 2:
+                    start_id, _ = line.split('\t')
+                    finished_ids.add(int(start_id))
+        with codecs.open('ids_finished.txt', 'r', encoding="utf-8") as f:
+            for line in f:
+                line_split = line.strip().split('\t')
+                if len(line_split) == 2:
+                    url_id = int(line_split[0])
+                    url_string = str(line_split[1])
+                    # print url_id
+                    url_ids[url_string] = url_id
+                    if url_id not in finished_ids:
+                        url_tasks.put(url_string)
+                    global_id = max(global_id, url_id + 1)
+        del finished_ids
+        last_update = time.time()
+    else:
+        # cold start
+        global_id = 0
+        start_url = "http://www.northwestern.edu/"
+        url_tasks = Queue.Queue()
+        url_tasks.put(start_url)
+        url_ids[start_url] = 0
+        global_id += 1
     
     workers = []
     for i in xrange(N_workers):
